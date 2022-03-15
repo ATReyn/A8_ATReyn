@@ -1,0 +1,271 @@
+---
+title: "A8_ATReyn"
+output: html_notebook
+---
+
+**Github:** https://github.com/ATReyn/A8_ATReyn
+
+### Introduction
+
+Invasive plants such as garlic mustard (*Alliaria petiolata*) can alter plant communities in the areas it is present by overtaking other plant species via shading, nutrient competition, or allelopathy. The alteration of plant communities can be determined by which plants exist in a community with or without garlic mustard plants. Here, we address two questions: does garlic mustard alter plant communities and does garlic mustard presence/absence or sampling population have a bigger impact? 
+
+This dataset contains information on sample ID, sampling population, absence/presence of garlic mustard, and whether certain plants where found in the sampled plots. To examine the impacts of garlic mustard presence on plant communities, I will compare how distant communities are using both Neighbour-joining and Bray-Curtis dissimilarity tests to examine clusters of samples. I will then compare presence/absence of garlic mustard and sampling population to determine if communities under similar pressures cluster together in their composition. I will then use an NMDS (Non-Metric Multidimensional Scaling) to visualize the distance between plant communities graphically, again comparing the presence/absence of garlic mustard and sampling population.
+
+
+### Investigating Garlic Mustard Impacts on Plant Communities
+
+Setup:
+```{r}
+
+# Load libraries
+library(ggplot2)
+library(ape)
+library(ggtree)
+library(vegan)
+library(dplyr)
+
+# Load data
+GMData <- read.csv("./FloristicSurvey.csv")
+
+```
+
+Create Distance Matrix:
+```{r}
+
+# Create binary for presence/absence of garlic mustard
+#OTU_Plant <- OTU_data %>% mutate(GMPresence = ifelse(Location == "i", paste("1"), paste("0")))
+
+# Select plants and site ID
+OTU_Plant <- GMData %>% select(ï..Quadrate, Claytonia_virginiana:Unknown_9)
+
+# Replace column numbers with site ID
+OTU_Plant <- data.frame(OTU_Plant[,-1], row.names = OTU_Plant[,1])
+
+
+# Covert to binary data
+OTU_bin <- OTU_Plant
+OTU_bin[OTU_bin > 0] = 1
+
+
+```
+
+Create Neighbour-joining tree to cluster similar plant communities by garlic mustard presence/absence:
+```{r}
+
+# Create distance matrix
+OTU_bin_dist <- dist(OTU_bin, method = 'binary')
+
+# NJ method
+OTU_tree <- nj(OTU_bin_dist)
+
+# Group by garlic mustard presence/absence
+GMCommunity = c(rep("Absent", 3), rep("Present", 6), rep("Absent", 3), rep("Present", 3), 
+                rep("Absent", 6), rep("Present", 3), rep("Absent", 3),rep("Present", 3))
+GMGroups <- split(OTU_tree$tip.label, GMCommunity)
+GMTree <- groupOTU(OTU_tree, GMGroups)
+
+# Create tree
+NJTreePlotGM <- ggtree(GMTree, layout = "rectangular", aes(colour = group)) +
+  geom_tiplab(size = 2, aes(angle = 0)) +
+  theme(legend.position = "right")
+
+```
+
+Create Neighbour-joining tree to cluster similar plant communities by sampling population:
+```{r}
+
+# Group by sampling population
+SamplingPop = c(rep("7", 6), rep("3", 6), rep("1", 6), rep("13", 6), rep("14", 6))
+PopGroups <- split(OTU_tree$tip.label, SamplingPop)
+PopTree <- groupOTU(OTU_tree, PopGroups)
+
+# Create tree
+NJTreePlotPop <- ggtree(PopTree, layout = "rectangular", aes(colour = group)) +
+  geom_tiplab(size = 2, aes(angle = 0)) +
+  theme(legend.position = "right")
+
+print(NJTreePlotPop)
+
+```
+
+Create Bray-Curtis dissimilarity tree to cluster similar plant communities by garlic mustard absence/presence:
+```{r}
+
+# Create distance matrix and tree
+OTU_dist <- vegdist(OTU_bin, method = "bray", binary = F)
+OTU_tree_bray <- nj(OTU_dist)
+
+# Group by garlic mustard absence/presence
+GMGroupsBray <- split(OTU_tree_bray$tip.label, GMCommunity)
+GMTreeBray <- groupOTU(OTU_tree_bray, GMGroupsBray)
+
+#Plot tree
+BrayTreePlotGM <- ggtree(GMTreeBray, layout = "rectangular", aes(colour = group)) +
+  geom_tiplab(size = 2, aes(angle = 0)) +
+  theme(legend.position = "right")
+
+```
+
+
+Create Bray-Curtis dissimilarity tree to cluster similar plant communities by sampling population:
+```{r}
+
+# Group by sampling population
+PopGroupsBray <- split(OTU_tree_bray$tip.label, SamplingPop)
+PopTreeBray <- groupOTU(OTU_tree_bray, PopGroupsBray)
+
+#Plot tree
+BrayTreePlotPop <- ggtree(PopTreeBray, layout = "rectangular", aes(colour = group)) +
+  geom_tiplab(size = 2, aes(angle = 0)) +
+  theme(legend.position = "right")
+
+
+```
+
+
+Non-Metric Multidimensional Scaling (NMDS):
+```{r}
+
+# Convert binary dataframe to matrix
+community_matrix <- as.matrix(OTU_bin) 
+
+# Perform NMDS on community data
+Community_NMDS <-  metaMDS(community_matrix, k = 2, trymax = 50)
+
+```
+
+Visualising NMDS:
+```{r}
+
+# Create NMDS data
+PDat <- data.frame(NMDS1 = Community_NMDS$points[,1],
+                 NMDS2 = Community_NMDS$points[,2])
+
+# Plot NMDS 
+plot(Community_NMDS)
+ordiplot(Community_NMDS, type = "n")
+
+# Plot NDMS highlighting communities (sample ID) and species
+orditorp(Community_NMDS, display = "species", col = "red", air = 0.01)
+orditorp(Community_NMDS, display="sites", cex = 1.25, air = 0.01)
+
+
+
+
+```
+
+Visualizing NMDS for garlic mustard absence/presence:
+```{r}
+
+# Plot for garlic mustard absence/presence
+ordiplot(Community_NMDS, type = "n")
+ordihull(Community_NMDS, groups = GMCommunity, draw = "polygon", col = c("#F8766D", "#00BFC4"), alpha = 0.15, label = F)
+orditorp(Community_NMDS, display = "species", col = "darkgrey", air = 0.01)
+orditorp(Community_NMDS, display = "sites", air = 0.01, cex = 1.25)
+
+```
+
+Visualising NMDS for sampling population:
+```{r}
+
+# Plot for sample population
+ordiplot(Community_NMDS, type = "n")
+ordihull(Community_NMDS, groups = SamplingPop, draw = "polygon", col = c("#F564E3", "#619CFF", "#B79F00", "#00BA38", "#00BFC4"), alpha = 0.15, label = F)
+orditorp(Community_NMDS, display = "species", col = "darkgrey", air = 0.01)
+orditorp(Community_NMDS, display = "sites", air = 0.01, cex = 1.25)
+
+
+```
+
+### What effect (if any) does garlic mustard have on the plant community?
+
+It appears that, when abundance of plant species is not considered, communities can be grouped together based on garlic mustard presence or absence within each sampling plot (Fig. 1), although this could be due to chance and not a correlation to garlic mustard presence. A Bray-Curtis analysis shows similar levels of clustering, although with different tree topology (Fig. 2).
+
+
+
+```{r, echo = F}
+
+print(NJTreePlotGM)
+
+```
+**Fig. 1.** A Neighbour-joining tree clustering samples by plant community composition similarity. Garlic mustard presence within sampling plots for each plot is highlighted (absence = red, presence = blue).
+
+\n
+
+```{r, echo = F}
+
+print(BrayTreePlotGM)
+
+```
+**Fig. 2.** A Neighbour-joining tree clustering samples by plant community composition similarity using Bray-Curtis dissimilarity. Garlic mustard presence for each sample plot is highlighted (absence = red, presence = blue).
+
+\n
+\n
+
+However, similarities in plant community composition may be better explained by sampling population, which was designated based on garlic mustard presence near plots. Grouping our Bray-Curtis analysis on sample population creates distinct clusters (Fig. 3), which indicate that garlic mustard does in fact alter plant community composition.
+
+
+```{r, echo = F}
+
+print(BrayTreePlotPop)
+
+```
+**Fig. 3.** A Neighbour-joining tree clustering samples by plant community composition similarity using Bray-Curtis dissimilarity. Each sampling population (7, 1, 3, 13, and 14), designated by nearby garlic mustard plants, are grouped by colour.
+
+
+### What has a stronger effect on plant communities: the presence/absence of garlic mustard (in/out) or sampling population?
+
+Based on Neighbour-joining cluster analyses, garlic mustard was found to impact plant community composition. Clusters were more distinct when tree limbs were grouped by sampling population (Fig. 3) than when they were grouped by garlic mustard presence/absence in the plots (Fig. 1, 2). To further investigate the effects of garlic mustard and which metric had a stronger effect on plant community composition, a Non-Metric Multidimensional Scaling (NMDS) was performed, with clusters created based on garlic mustard absence/presence and sampling population. Clusters for plant communities containing garlic mustard overlapped greatly with clusters for plant communities where garlic mustard was absent (Fig. 4), meaning that garlic mustard presence/absence within the sampled plots is not enough to explain the variation in plant community variation.
+
+
+```{r, echo = F}
+
+ordiplot(Community_NMDS, type = "n")
+ordihull(Community_NMDS, groups = GMCommunity, draw = "polygon", col = c("#F8766D", "#00BFC4"), alpha = 0.15, label = F)
+orditorp(Community_NMDS, display = "species", col = "darkgrey", air = 0.01)
+orditorp(Community_NMDS, display = "sites", air = 0.01, cex = 1.25)
+
+```
+**Fig. 4.** An NMDS plot showing plant community composition for the samples. Samples are denoted in black and species denoted in grey. Samples fall closest to the species they contained. Garlic mustard absence (red) and presence (blue) is overlaid atop samples.
+
+\n
+\n
+
+When communities were clustered based on sampling population, which takes into account nearby garlic mustard plants, clusters were much more distinct (Fig. 5). This suggests that sampling population has a stronger effect on plant community composition than garlic mustard presence/absence does. This makes sense, as nearby garlic mustard plants just outside of the sampling plot may still compete for nutrients in the subsurface with within-plot species and may also have negative allelopathic effects. This means that garlic mustard absence from the plot does not necessarily remove any detrimental effects of garlic mustard.
+
+
+```{r, echo = F}
+
+# Plot for sample population
+ordiplot(Community_NMDS, type = "n")
+ordihull(Community_NMDS, groups = SamplingPop, draw = "polygon", col = c("#F564E3", "#619CFF", "#B79F00", "#00BA38", "#00BFC4"), alpha = 0.15, label = F)
+orditorp(Community_NMDS, display = "species", col = "darkgrey", air = 0.01)
+orditorp(Community_NMDS, display = "sites", air = 0.01, cex = 1.25)
+
+```
+**Fig. 5.** An NMDS plot showing plant community composition for the samples. Samples are denoted in black and species denoted in grey. Samples fall closest to the species they contained. Sampling populations are highlighted with colour.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
